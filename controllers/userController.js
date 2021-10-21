@@ -5,6 +5,8 @@ const Joi = require("joi");
 const ErrorResponse = require("../utils/errorResponse");
 
 const User = require("../model/Users");
+const mailService = require("../utils/mailService");
+const { text } = require("express");
 
 exports.signUp = async (req, res, next) => {
   const { username, email, password } = req.body;
@@ -47,8 +49,43 @@ exports.signIn = async (req, res, next) => {
   }
 };
 
-exports.forgotPassword = async (req, res) => {
-  res.send("forgotPassword works234");
+exports.forgotPassword = async (req, res, next) => {
+  const { email } = req.body;
+  try {
+    const userExists = await User.findOne({ email });
+    if (!userExists) {
+      return next(new ErrorResponse("Error occured", 404));
+    }
+
+    const resetToken = userExists.generateResetPasswordToken();
+
+    await userExists.save();
+    const resetUrl = `${process.env.RESET_URL}/resetpassword/${resetToken}`;
+
+    const message = `
+    <h1>You have just requested for a password reset</h1>
+    <p>Please click on this link to reset your password</p>
+    <a href=${resetUrl} clicktracking=off>${resetUrl} </a>
+    `;
+
+    try {
+      await mailService({
+        to: userExists.email,
+        subject: "Password Reset Request",
+        text: message,
+      });
+
+      res.status(200).json({ success: true, data: "Email successfully sent" });
+    } catch (error) {
+      userExists.resetPasswordToken = undefined;
+      userExists.resetPasswordExpire = undefined;
+    }
+
+    await userExists.save();
+    return next(new ErrorResponse("Email could not be sent", 500));
+  } catch (error) {
+    next(error);
+  }
 };
 
 exports.resetPassword = async (req, res) => {

@@ -1,6 +1,6 @@
 const mongoose = require("mongoose");
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken')
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 
 const UserSchema = mongoose.Schema({
   username: {
@@ -19,7 +19,7 @@ const UserSchema = mongoose.Schema({
   password: {
     type: String,
     required: [true, "password must be provided"],
-    minlength: [8,"Password must be at least 8 characters long"],
+    minlength: [8, "Password must be at least 8 characters long"],
     select: false,
   },
   resetPasswordToken: {
@@ -40,15 +40,26 @@ UserSchema.pre("save", async function (next) {
   next();
 });
 
+UserSchema.methods.matchPassword = async function (password) {
+  return await bcrypt.compare(password, this.password);
+};
 
-UserSchema.methods.matchPassword =async function(password){
-return await bcrypt.compare(password, this.password)
+UserSchema.methods.getSignedToken = function () {
+  return jwt.sign({ id: this._id }, process.env.JWT_SECET_KEYS, {
+    expiresIn: process.env.JWT_EXPIRESIN,
+  });
+};
+UserSchema.methods.generateResetPasswordToken = function () {
+  const resetToken = crypto.randomBytes(25).toString("hex");
 
-  }
+  this.resetPasswordToken = crypto
+    .createhash("sha256")
+    .update(resetToken)
+    .digest("hex");
+  this.resetPasswordExpire = Date.now() + 10 * (60 * 1000);
 
-  UserSchema.methods.getSignedToken = function (){
-    return jwt.sign({id : this._id}, process.env.JWT_SECET_KEYS, {expiresIn :process.env.JWT_EXPIRESIN})
-  }
+  return resetToken;
+};
 
 const User = mongoose.model("users", UserSchema);
 
